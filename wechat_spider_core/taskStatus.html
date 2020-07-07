@@ -1,0 +1,121 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <style type="text/css">
+        body{
+            font-size:12px;
+        }
+        #spider_panel {
+            position: absolute;
+            width: 600px;
+            height: 400px;
+            background-color: #ffffff;
+            display: flex;
+            flex-direction: row;
+            color: #606266;
+        }
+
+            #spider_panel > #task_list {
+                flex: 1;
+                height: 100%;
+                list-style: none;
+                padding-top: 2rem;
+                overflow-y: scroll;
+                overflow-x: hidden;
+            }
+
+                #spider_panel > #task_list::before {
+                    width: 50%;
+                    content: '任务列表';
+                    text-align: center;
+                    display: inline-block;
+                    line-height: 1.5rem;
+                    height: 1.5rem;
+                    left: 0;
+                    top: 0;
+                    background-color: #ffffff;
+                    border-bottom: 1px solid #303133;
+                    position: absolute;
+                }
+
+            #spider_panel > #task_state {
+                flex: 1;
+                height: 100%;
+                padding-left:1rem;
+                border-left: 1px solid #303133;
+            }
+
+                #spider_panel > #task_state::before {
+                    width: 100%;
+                    content: '任务状态';
+                    text-align: center;
+                    display: inline-block;
+                    line-height: 1.5rem;
+                    border-bottom: 1px solid #303133;
+                }
+
+            #spider_panel > #task_list > .task_block {
+                padding-left: 0.5rem;
+                width: 90%;
+                margin: 1rem .5rem 0 .5rem;
+                border: 1px solid #303133;
+                color: #606266;
+                border-radius: .5rem;
+            }
+
+        .task_block .task_info {
+            width: 100%;
+            display: inline-block;
+            line-height: 1.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div id="spider_panel">
+        <div id="task_list"></div>
+        <div id="task_state"></div>
+    </div>
+</body>
+</html>
+<script src="https://cdn.bootcdn.net/ajax/libs/jquery/1.12.4/jquery.min.js"></script>
+<script>
+    $(function () {
+        const loadTaskList = async () => {
+            await CefSharp.BindObjectAsync('taskStatus');
+            taskStatus.GetTaskList().then(data => {
+                console.log(data, typeof (data));
+                if (data.length == 0) {
+                    $("#task_list").text("全部任务执行结束，等待下一轮。");
+                    return;
+                }
+                $("#task_list").html("");
+                data.map((item, index) => {
+                    $("#task_list").append(`<div class="task_block">
+                            <span class="task_info">${item.taskName}</span>
+                            <span class="task_info">规则：${item.taskRole}</span>
+                            <span class="task_info">更新时间：${item.updateDate}</span>
+                    </div>`)
+                });
+            });
+        }
+
+        const loadCurrentTask = async () => {
+            await CefSharp.BindObjectAsync('taskStatus');
+            taskStatus.GetCurrentTask().then(data => {
+                $("#task_state").html(`<div class="task_block">
+                            <span class="task_info">${data.taskName}</span>
+                            <span class="task_info">错误次数：${data.error}</span>
+                            <span class="task_info">当前页码：${data.page}</span>
+                    </div>`);
+            });
+        }
+
+        setInterval(() => {
+            loadTaskList();
+            loadCurrentTask();
+        }, 3000);
+    });
+</script>
