@@ -1,15 +1,13 @@
 ﻿using CefSharp;
-using Microsoft.EntityFrameworkCore.Internal;
 using System;
 using System.Linq;
 using System.Collections.Generic;
-using System.Text;
 
 namespace wechat_spider_core
 {
     public class SpiderTask
     {
-        public int SpiderId { get; set; }
+        public long SpiderId { get; set; }
         public string NickName { get; set; }
 
         public string Alias { get; set; }

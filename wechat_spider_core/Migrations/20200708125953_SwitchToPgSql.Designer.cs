@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using wechat_spider_core.ef;
@@ -9,9 +10,10 @@ using wechat_spider_core.ef;
 namespace wechat_spider_core.Migrations
 {
     [DbContext(typeof(SpiderContext))]
-    partial class SpiderContextModelSnapshot : ModelSnapshot
+    [Migration("20200708125953_SwitchToPgSql")]
+    partial class SwitchToPgSql
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

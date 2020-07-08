@@ -6,7 +6,7 @@ namespace wechat_download_core
 {
     public class DownloadModel
     {
-        public string Id { get; set; }
+        public long Id { get; set; }
 
         public string alias { get; set; }
 

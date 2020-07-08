@@ -1,11 +1,12 @@
-﻿using NLog.Fluent;
+﻿using Autofac;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.Threading;
-using wechat_spider_core.chrome;
+using System.Threading.Tasks;
 using wechat_spider_core.ef;
+using wechat_spider_core.ioc;
+using wechat_spider_core.service;
 
 namespace wechat_spider_core.spider
 {
@@ -14,6 +15,8 @@ namespace wechat_spider_core.spider
         public TaskStatusMain taskStatus = new TaskStatusMain();
 
         private readonly List<SpiderTask> SpiderTaskList = new List<SpiderTask>();
+
+        private readonly ISpiderHandler spiderHandler = InitIocModule.GetContainer().Resolve<ISpiderHandler>();
 
         private SpiderTask CurrentTask = null;
 
@@ -61,30 +64,18 @@ namespace wechat_spider_core.spider
         {
             if(!InitStatus)
             {
-                using (var db = new SpiderContext())
-                {
-                    DateTime dateTime = DateTime.Now;
-                    TimeSpan ts = dateTime - new DateTime(1970, 1, 1, 0, 0, 0, 0);
-                    LastStartTimeSpan = Convert.ToInt32(ts.TotalSeconds);
-                    db.TaskStartSigns.Add(new TaskStartSign
-                    {
-                        Id = Guid.NewGuid().ToString().Replace("-", ""),
-                        StartDate = LastStartTimeSpan.ToString()
-                    });
-                    db.SaveChanges();
-                }
+                spiderHandler.InsertClientSgin(IdWorkContext.CLIENT_ID);
             }
-            
         }
 
-        public void Init()
+        public async Task Init()
         {
             if (InitStatus)
                 return;
             using (var db = new SpiderContext())
             {
-                var list = db.WeChatAccounts.OrderBy(a => a.SpiderRole).ToList(); 
-                if(list.Count <= 0)
+                var list = await spiderHandler.ListWeChatAccountAsync();
+                if (list.Count <= 0)
                 {
                     LogService.Error("当前没有取到公众号名称，请在数据库中写入数据");
                     return;
@@ -98,31 +89,32 @@ namespace wechat_spider_core.spider
                         Alias = item.Alias,
                         LastUpdateDate = item.LastUpdate
                     };
-                    if(!string.IsNullOrWhiteSpace(item.SpiderRole))
-                        spider.Roles.Add(item.SpiderRole);
-                    if (!string.IsNullOrWhiteSpace(item.SpiderRole1))
-                        spider.Roles.Add(item.SpiderRole1);
-                    if (!string.IsNullOrWhiteSpace(item.SpiderRole2))
-                        spider.Roles.Add(item.SpiderRole2);
-                    if (!string.IsNullOrWhiteSpace(item.SpiderRole3))
-                        spider.Roles.Add(item.SpiderRole3);
-                    if (!string.IsNullOrWhiteSpace(item.SpiderRole4))
-                        spider.Roles.Add(item.SpiderRole4);
-                    if (!string.IsNullOrWhiteSpace(item.SpiderRole5))
-                        spider.Roles.Add(item.SpiderRole5);
+                    item.SpiderRoles.ForEach(role =>
+                    {
+                        spider.Roles.Add(role.Role);
+                    });
                     SpiderTaskList.Add(spider);
                 });
                 JavascriptCallback.OnSearchHandler += SearchHandlerCallback;
                 JavascriptCallback.OnArticleResponseHandler += ArticleResponseHandlerCallback;
-                TaskTimer.Interval = 1000 * 4;
+                TaskTimer.Interval = 10000;
                 TaskTimer.Tick += TaskTimer_Tick;
                 TaskTimer.Start();
                 InitStatus = true;
             }
         }
 
-        private void TaskTimer_Tick(object sender, EventArgs e)
+        private async void TaskTimer_Tick(object sender, EventArgs e)
         {
+            try
+            {
+                await spiderHandler.UpdateClientSgin(IdWorkContext.CLIENT_ID);
+            }
+            catch (NullReferenceException)
+            {
+                LogService.Error("更新客户端时间时未找到实体，尝试重新写入");
+                await spiderHandler.InsertClientSgin(IdWorkContext.CLIENT_ID);
+            }
             if (TaskRuning)
                 return;
             DateTime now = DateTime.Now;
@@ -130,6 +122,20 @@ namespace wechat_spider_core.spider
             string runDate = now.ToString("yyyyMMddHH");
             foreach (var item in SpiderTaskList)
             {
+                try
+                {
+                    if(!await spiderHandler.QuerySpaderStatus(item.SpiderId))
+                    {
+                        LogService.Info($"公众号{item.NickName}正在执行中");
+                        break;
+                    }
+                }
+                catch (NullReferenceException)
+                {
+                    LogService.Error($"未找到公众号{item.NickName}:({item.SpiderId})");
+                    break;
+                }
+                 
                 if(item.Ready(role, runDate))
                 {
                     LogService.Info($"当前规则{role}");
@@ -146,47 +152,48 @@ namespace wechat_spider_core.spider
         /// 搜索公众号完成后回调
         /// </summary>
         /// <param name="searchModel"></param>
-        private void SearchHandlerCallback(SearchModel searchModel)
+        private async void SearchHandlerCallback(SearchModel searchModel)
         {
-            SearchBiz searchBiz = searchModel.list.Where(c => c.nickname == CurrentTask.NickName || c.alias == CurrentTask.Alias).FirstOrDefault();
+            if(null == searchModel.list || 0 >= searchModel.list.Count)
+            {
+                LogService.Error($"未查询到公众号:{CurrentTask.NickName}");
+                return;
+            }
+            SearchBiz searchBiz = searchModel.list.FirstOrDefault(c => c.nickname == CurrentTask.NickName || c.alias == CurrentTask.Alias);
             if(null != searchBiz)
             {
                 CurrentTask.AppModel = searchBiz;
-                using (var db = new SpiderContext())
+                var accountModel = await spiderHandler.QueryWeChatAccountAsync(CurrentTask.SpiderId);
+                if (null == accountModel)
                 {
-                    var accountModel = db.WeChatAccounts.Where(c => c.Id == CurrentTask.SpiderId).FirstOrDefault();
-                    if (null == accountModel)
-                    {
-                        LogService.Error("未找到账号实体");
-                        return;
-                    }
-                    if (accountModel.LastUpdate.HasValue)
-                    {
-                        DateTime last = accountModel.LastUpdate.Value;
-                        TimeSpan ts = last - new DateTime(1970, 1, 1, 0, 0, 0, 0);
-                        LastStartTimeSpan = Convert.ToInt32(ts.TotalSeconds);
-                    }
-                    LogService.Info("更新公众号信息实体");
-                    accountModel.Alias = searchBiz.alias;
-                    accountModel.FakeId = searchBiz.fakeid;
-                    accountModel.RoundHeadImg = searchBiz.round_head_img;
-                    int.TryParse(searchBiz.service_type, out int sType);
-                    accountModel.ServiceType = sType;
-                    accountModel.NickName = searchBiz.nickname;
-                    accountModel.LastUpdate = DateTime.Now;
-                    db.SaveChanges();
-
-                    var task = SpiderTaskList.Where(c => c.SpiderId == CurrentTask.SpiderId).FirstOrDefault();
-                    task.LastUpdateDate = DateTime.Now;
-                    task.Alias = accountModel.Alias;
-                    task.NickName = accountModel.NickName;
-
+                    LogService.Error($"未找到账号实体:{CurrentTask.NickName}");
+                    return;
                 }
+                if (accountModel.LastUpdate.HasValue)
+                {
+                    DateTime last = accountModel.LastUpdate.Value;
+                    TimeSpan ts = last - new DateTime(1970, 1, 1, 0, 0, 0, 0);
+                    LastStartTimeSpan = Convert.ToInt32(ts.TotalSeconds);
+                }
+                LogService.Info($"更新公众号信息实体{CurrentTask.NickName}");
+                accountModel.Alias = searchBiz.alias;
+                accountModel.FakeId = searchBiz.fakeid;
+                accountModel.RoundHeadImg = searchBiz.round_head_img;
+                int.TryParse(searchBiz.service_type, out int sType);
+                accountModel.ServiceType = sType;
+                accountModel.NickName = searchBiz.nickname;
+                accountModel.LastUpdate = DateTime.Now;
+                await spiderHandler.UpdateWeChatAccountAsync(accountModel);
+
+                var task = SpiderTaskList.FirstOrDefault(c => c.SpiderId == CurrentTask.SpiderId);
+                task.LastUpdateDate = DateTime.Now;
+                task.Alias = accountModel.Alias;
+                task.NickName = accountModel.NickName;
                 CurrentTask.ToQueryArticleList(CurrentTask.CurrentPage);
             }
             else
             {
-                LogService.Error("未匹配到公众号名称");
+                LogService.Error($"未匹配到公众号名称:{CurrentTask.NickName}");
                 NextTask();
             }
         }
@@ -194,62 +201,58 @@ namespace wechat_spider_core.spider
         /// 获取历史文章列表回调
         /// </summary>
         /// <param name="articleResponseModel"></param>
-        private void ArticleResponseHandlerCallback(ArticleResponseModel articleResponseModel)
+        private async void ArticleResponseHandlerCallback(ArticleResponseModel articleResponseModel)
         {
             LogService.Info($"当前条数：{articleResponseModel.app_msg_list.Count},准备写入到数据库");
-            using (var db = new SpiderContext())
+            var accountModel = await spiderHandler.QueryWeChatAccountAsync(CurrentTask.SpiderId);
+            if(null == accountModel)
             {
-                var accountModel = db.WeChatAccounts.Where(c => c.Id == CurrentTask.SpiderId).FirstOrDefault();
-                if(null == accountModel)
+                LogService.Error($"未找到账号实体:{CurrentTask.NickName}");
+                NextTask();
+            }
+            else
+            {
+                int oldArticleCount = articleResponseModel.app_msg_list.Count(a => a.create_time < LastStartTimeSpan);      
+                if (oldArticleCount < articleResponseModel.app_msg_list.Count)
                 {
-                    LogService.Error("未找到账号实体");
-                    NextTask();
+                    List<WeChatArticle> saveList = new List<WeChatArticle>();
+                    articleResponseModel.app_msg_list.ForEach(async item =>
+                    {
+                        var article = await spiderHandler.QueryArticleByAid(item.aid);
+                        if (article.Count >= 1 || item.create_time < LastStartTimeSpan)
+                        {
+                            LogService.Info($"文章({item.aid})已经存在，跳过保存");
+                            return;
+                        }
+                        WeChatArticle model = item.ConvertModel();
+                        model.Id = IdWorkContext.ID_WORKER.NextId();
+                        model.CreateDate = DateTime.Now;
+                        model.WeChatAccount = accountModel;
+                        saveList.Add(model);
+                    });
+                    try
+                    {
+                        await spiderHandler.InsertArticleByList(saveList);
+                    }
+                    catch (Exception e)
+                    {
+                        LogService.Error($"将文章写入到数据库出错{e.Message}", e);
+                    }
+
+                    LogService.Info("准备翻页，休眠30秒");
+                    Thread.Sleep(1000 * 30);
+                    CurrentTask.ToQueryArticleList(++CurrentTask.CurrentPage);
                 }
                 else
                 {
-                    int oldArticleCount = articleResponseModel.app_msg_list.Where(a => a.create_time < LastStartTimeSpan).Count();
-                    
-                    if (oldArticleCount < articleResponseModel.app_msg_list.Count)
-                    {
-                        articleResponseModel.app_msg_list.ForEach(item =>
-                        {
-                            var article = db.WeChatArticles.Where(c => c.aid == item.aid).ToList();
-                            if (article.Count >= 1 || item.create_time < LastStartTimeSpan)
-                            {
-                                return;
-                            }
-                            WeChatArticle model = item.ConvertModel();
-                            model.Id = Guid.NewGuid().ToString().Replace("-", "");
-                            model.CreateDate = DateTime.Now;
-                            model.Homeownid = accountModel.Homeownid;
-                            model.WeChatAccount = accountModel;
-                            db.WeChatArticles.Add(model);
-                        });
-                        try
-                        {
-                            db.SaveChanges();
-                        }
-                        catch (Exception e)
-                        {
-                            LogService.Error($"将文章写入到数据库出错{e.Message}", e);
-                        }
-
-                        LogService.Info("准备翻页，休眠30秒");
-                        Thread.Sleep(1000 * 30);
-                        CurrentTask.ToQueryArticleList(++CurrentTask.CurrentPage);
-                    }
-                    else
-                    {
-                        NextTask();
-                    }
+                    NextTask();
                 }
             }
         }
 
         private void NextTask()
         {
-            LogService.Info("准备开始下一个任务，休眠30秒");
-            Thread.Sleep(1000 * 30);
+            LogService.Info("准备开始下一个任务");
             SpiderTaskList.Remove(CurrentTask);
             CurrentTask = null;
             TaskRuning = false;

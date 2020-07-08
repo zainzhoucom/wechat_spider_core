@@ -83,9 +83,9 @@ namespace wechat_spider_core
             chromeBrowser.Reload();
         }
 
-        private void SpiderManagerTask_Tick(object sender, EventArgs e)
+        private async void SpiderManagerTask_Tick(object sender, EventArgs e)
         {
-            spiderManager.Init();
+            await spiderManager.Init();
         }
     }
 }

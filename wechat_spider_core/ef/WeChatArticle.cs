@@ -10,13 +10,11 @@ namespace wechat_spider_core.ef
     [Table("wechat_article")]
     public class WeChatArticle
     {
-        [Column("id"), Key, Required, MaxLength(128)]
-        public string Id { get; set; }
+        [Column("id"), Key, Required]
+        public long Id { get; set; }
 
         [Column("create_date")]
         public DateTime CreateDate { get; set; }
-        [Column("hometownid"), MaxLength(50)]
-        public string Homeownid { get; set; }
         [Column("download"),DefaultValue(false)]
         public bool Download { get; set; }
         [Column("local_path"), MaxLength(255)]

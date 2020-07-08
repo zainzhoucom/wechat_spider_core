@@ -1,10 +1,10 @@
 ﻿using System;
 using Microsoft.EntityFrameworkCore.Migrations;
-using MySql.Data.EntityFrameworkCore.Metadata;
+using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 namespace wechat_spider_core.Migrations
 {
-    public partial class reloaddatabase : Migration
+    public partial class SwitchToPgSql : Migration
     {
         protected override void Up(MigrationBuilder migrationBuilder)
         {
@@ -12,8 +12,11 @@ namespace wechat_spider_core.Migrations
                 name: "task_start_sign",
                 columns: table => new
                 {
-                    id = table.Column<string>(maxLength: 128, nullable: false),
-                    start_date = table.Column<string>(nullable: false)
+                    id = table.Column<long>(nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    client_id = table.Column<long>(nullable: false),
+                    start_date = table.Column<DateTime>(nullable: false),
+                    run_status = table.Column<bool>(nullable: false, defaultValue: false)
                 },
                 constraints: table =>
                 {
@@ -24,34 +27,54 @@ namespace wechat_spider_core.Migrations
                 name: "wechat_account",
                 columns: table => new
                 {
-                    id = table.Column<int>(nullable: false)
-                        .Annotation("MySQL:ValueGenerationStrategy", MySQLValueGenerationStrategy.IdentityColumn),
+                    id = table.Column<long>(nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     nick_name = table.Column<string>(maxLength: 128, nullable: false),
                     alias = table.Column<string>(maxLength: 128, nullable: true),
                     fackid = table.Column<string>(maxLength: 128, nullable: true),
                     round_head_img = table.Column<string>(maxLength: 500, nullable: true),
                     service_type = table.Column<int>(nullable: false),
                     last_update_time = table.Column<DateTime>(nullable: true),
-                    hometownid = table.Column<string>(maxLength: 50, nullable: true),
-                    spider_role = table.Column<string>(maxLength: 20, nullable: true),
-                    spider_role1 = table.Column<string>(maxLength: 20, nullable: true),
-                    spider_role2 = table.Column<string>(maxLength: 20, nullable: true),
-                    spider_role3 = table.Column<string>(maxLength: 20, nullable: true),
-                    spider_role4 = table.Column<string>(maxLength: 20, nullable: true),
-                    spider_role5 = table.Column<string>(maxLength: 20, nullable: true)
+                    task_sign_id = table.Column<long>(nullable: true)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_wechat_account", x => x.id);
+                    table.ForeignKey(
+                        name: "FK_wechat_account_task_start_sign_task_sign_id",
+                        column: x => x.task_sign_id,
+                        principalTable: "task_start_sign",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "spider_role",
+                columns: table => new
+                {
+                    id = table.Column<long>(nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    role = table.Column<string>(maxLength: 20, nullable: false),
+                    account_id = table.Column<long>(nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_spider_role", x => x.id);
+                    table.ForeignKey(
+                        name: "FK_spider_role_wechat_account_account_id",
+                        column: x => x.account_id,
+                        principalTable: "wechat_account",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Restrict);
                 });
 
             migrationBuilder.CreateTable(
                 name: "wechat_article",
                 columns: table => new
                 {
-                    id = table.Column<string>(maxLength: 128, nullable: false),
+                    id = table.Column<long>(nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     create_date = table.Column<DateTime>(nullable: false),
-                    hometownid = table.Column<string>(maxLength: 50, nullable: true),
                     download = table.Column<bool>(nullable: false),
                     local_path = table.Column<string>(maxLength: 255, nullable: true),
                     aid = table.Column<string>(nullable: true),
@@ -73,7 +96,7 @@ namespace wechat_spider_core.Migrations
                     tagid = table.Column<string>(nullable: true),
                     title = table.Column<string>(nullable: true),
                     update_time = table.Column<DateTime>(nullable: false),
-                    account_id = table.Column<int>(nullable: true)
+                    account_id = table.Column<long>(nullable: true)
                 },
                 constraints: table =>
                 {
@@ -87,6 +110,16 @@ namespace wechat_spider_core.Migrations
                 });
 
             migrationBuilder.CreateIndex(
+                name: "IX_spider_role_account_id",
+                table: "spider_role",
+                column: "account_id");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_wechat_account_task_sign_id",
+                table: "wechat_account",
+                column: "task_sign_id");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_wechat_article_account_id",
                 table: "wechat_article",
                 column: "account_id");
@@ -95,13 +128,16 @@ namespace wechat_spider_core.Migrations
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(
-                name: "task_start_sign");
+                name: "spider_role");
 
             migrationBuilder.DropTable(
                 name: "wechat_article");
 
             migrationBuilder.DropTable(
                 name: "wechat_account");
+
+            migrationBuilder.DropTable(
+                name: "task_start_sign");
         }
     }
 }
