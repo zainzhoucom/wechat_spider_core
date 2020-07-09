@@ -1,5 +1,4 @@
-﻿using Autofac;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using wechat_spider_core.ef;
@@ -11,7 +10,7 @@ namespace wechat_spider_core.service
 {
     public class SpiderHandler : ISpiderHandler
     {
-        private readonly SpiderContext spiderContext = InitIocModule.GetContainer().Resolve<SpiderContext>();
+        private readonly SpiderContext spiderContext = InitIocModule.GetFromFac<SpiderContext>();
         public async Task<int> InsertArticleByList(List<WeChatArticle> list)
         {
             list.ForEach(item =>
@@ -23,29 +22,23 @@ namespace wechat_spider_core.service
 
         public async Task InsertClientSgin(long clientId)
         {
-            using (var db = new SpiderContext())
+            spiderContext.TaskStartSigns.Add(new TaskStartSign
             {
-                db.TaskStartSigns.Add(new TaskStartSign
-                {
-                    Id = IdWorkContext.ID_WORKER.NextId(),
-                    ClientId = clientId,
-                    StartDate = DateTime.Now,
-                    RunStatus = true
-                });
-                await db.SaveChangesAsync();
-            }
+                Id = IdWorkContext.ID_WORKER.NextId(),
+                ClientId = clientId,
+                StartDate = DateTime.Now,
+                RunStatus = true
+            });
+            await spiderContext.SaveChangesAsync();
         }
 
         public async Task<List<WeChatAccount>> ListWeChatAccountAsync()
         {
-            using (var db = new SpiderContext())
-            {
-                return await db.WeChatAccounts
-                    .Include(c => c.TaskStartSign)
-                    .Include(role => role.SpiderRoles.OrderByDescending(role => role.Role))
-                    .OrderBy(c => c.LastUpdate)
-                    .ToListAsync();
-            }            
+            return await spiderContext.WeChatAccounts
+                .Include(c => c.TaskStartSign)
+                .Include(role => role.SpiderRoles.OrderByDescending(role => role.Role))
+                .OrderBy(c => c.LastUpdate)
+                .ToListAsync();
         }
 
         public async Task<List<WeChatArticle>> QueryArticleByAid(string aid)
@@ -55,24 +48,45 @@ namespace wechat_spider_core.service
 
         public async Task<bool> QuerySpaderStatus(long accountId)
         {
-            using (var db = new SpiderContext())
+            var account = await spiderContext.WeChatAccounts.Where(a => a.Id == accountId)
+                .Include(t => t.TaskStartSign).FirstOrDefaultAsync();
+            if(null == account)
             {
-                var account = await db.WeChatAccounts.Where(a => a.Id == accountId)
-                    .Include(t => t.TaskStartSign).FirstOrDefaultAsync();
-                if(null == account)
-                {
-                    throw new NullReferenceException("未找到公众号实体");
-                }
-                return account.TaskStartSign.RunStatus;
+                throw new NullReferenceException("未找到公众号实体");
             }
+            return account.TaskStartSign != null || account.TaskStartSign.RunStatus;
         }
 
         public async Task<WeChatAccount> QueryWeChatAccountAsync(long accountId)
         {
-            using (var db = new SpiderContext())
+            return await spiderContext.WeChatAccounts.FirstOrDefaultAsync(c => c.Id == accountId);
+        }
+
+        public async Task<int> SetAccountSpiderStart(long accountId, long clientId)
+        {
+            var account = await spiderContext.WeChatAccounts.FirstOrDefaultAsync(c => c.Id == accountId);
+            if(null == account)
             {
-                return await db.WeChatAccounts.FirstOrDefaultAsync(c => c.Id == accountId);
+                throw new NullReferenceException("未找到公众号实体");
             }
+            var client = await spiderContext.TaskStartSigns.FirstOrDefaultAsync(c => c.Id == clientId);
+            if(null == client)
+            {
+                throw new NullReferenceException("未找到客户端实体");
+            }
+            account.TaskStartSign = client;
+            return await spiderContext.SaveChangesAsync();
+        }
+
+        public async Task<int> SetAccountSpiderStop(long accountId)
+        {
+            var account = await spiderContext.WeChatAccounts.FirstOrDefaultAsync(c => c.Id == accountId);
+            if(null == account)
+            {
+                throw new NullReferenceException("未找到公众号实体");
+            }
+            account.TaskStartSign = null;
+            return await spiderContext.SaveChangesAsync();
         }
 
         public async Task<int> SetClientSignOut(long clientId)
@@ -88,28 +102,22 @@ namespace wechat_spider_core.service
 
         public async Task UpdateClientSgin(long clientId)
         {
-            using (var db = new SpiderContext())
+            var sign = await spiderContext.TaskStartSigns.FirstOrDefaultAsync(c => c.Id == clientId);
+            if(null != sign)
             {
-                var sign = await db.TaskStartSigns.FirstOrDefaultAsync(c => c.Id == clientId);
-                if(null != sign)
-                {
-                    sign.StartDate = DateTime.Now;
-                    await db.SaveChangesAsync();
-                }
-                else
-                {
-                    throw new NullReferenceException("未找到实体");
-                }
+                sign.StartDate = DateTime.Now;
+                await spiderContext.SaveChangesAsync();
+            }
+            else
+            {
+                throw new NullReferenceException("未找到实体");
             }
         }
 
         public async Task<int> UpdateWeChatAccountAsync(WeChatAccount model)
         {
-            using (var db = new SpiderContext())
-            {
-                db.WeChatAccounts.Update(model);
-                return await db.SaveChangesAsync();
-            }
+            spiderContext.WeChatAccounts.Update(model);
+            return await spiderContext.SaveChangesAsync();
         }
     }
 }

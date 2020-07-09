@@ -48,5 +48,9 @@ namespace wechat_spider_core
         Task<List<WeChatArticle>> QueryArticleByAid(string aid);
 
         Task<int> SetClientSignOut(long clientId);
+
+        Task<int> SetAccountSpiderStop(long accountId);
+
+        Task<int> SetAccountSpiderStart(long accountId, long clientId);
     }
 }

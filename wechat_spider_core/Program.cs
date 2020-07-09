@@ -1,5 +1,6 @@
 using System;
 using System.Windows.Forms;
+using wechat_spider_core.ioc;
 
 namespace wechat_spider_core
 {
@@ -11,9 +12,12 @@ namespace wechat_spider_core
         [STAThread]
         static void Main()
         {
+            InitIocModule.Init();
+
             Application.SetHighDpiMode(HighDpiMode.SystemAware);
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
+
             Application.Run(new Form1());
         }
     }

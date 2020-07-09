@@ -1,5 +1,4 @@
-﻿using Autofac;
-using CefSharp;
+﻿using CefSharp;
 using System;
 using System.Windows.Forms;
 using wechat_spider_core.ioc;
@@ -10,7 +9,7 @@ namespace wechat_spider_core
     public partial class Form1 : Form
     {
         private readonly static ChromeWebBrowser chromeWebBrowser = new ChromeWebBrowser();
-        private readonly ISpiderHandler spiderHandler = InitIocModule.GetContainer().Resolve<ISpiderHandler>();
+        private readonly ISpiderHandler spiderHandler = InitIocModule.GetFromFac<ISpiderHandler>();
 
         public Form1()
         {

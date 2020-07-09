@@ -3,6 +3,7 @@ using CefSharp.WinForms;
 using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using wechat_spider_core.chrome;
 using wechat_spider_core.spider;
@@ -83,9 +84,13 @@ namespace wechat_spider_core
             chromeBrowser.Reload();
         }
 
-        private async void SpiderManagerTask_Tick(object sender, EventArgs e)
+        private void SpiderManagerTask_Tick(object sender, EventArgs e)
         {
-            await spiderManager.Init();
+            Task.Run(async () =>
+            {
+                await spiderManager.Init();
+            });
+            
         }
     }
 }

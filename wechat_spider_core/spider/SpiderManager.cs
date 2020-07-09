@@ -1,5 +1,4 @@
-﻿using Autofac;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -16,7 +15,7 @@ namespace wechat_spider_core.spider
 
         private readonly List<SpiderTask> SpiderTaskList = new List<SpiderTask>();
 
-        private readonly ISpiderHandler spiderHandler = InitIocModule.GetContainer().Resolve<ISpiderHandler>();
+        private readonly ISpiderHandler spiderHandler = InitIocModule.GetFromFac<ISpiderHandler>();
 
         private SpiderTask CurrentTask = null;
 
@@ -42,12 +41,12 @@ namespace wechat_spider_core.spider
             return CurrentTask;
         }
 
-        public void OnRequestError()
+        public async Task OnRequestError()
         {
             if(ErrorRetryCount >= MaxRetry)
             {
                 LogService.Info($"{CurrentTask.NickName}重试到最大次数，跳过");
-                NextTask();
+                await NextTask();
             }
             else
             {
@@ -72,36 +71,34 @@ namespace wechat_spider_core.spider
         {
             if (InitStatus)
                 return;
-            using (var db = new SpiderContext())
+
+            var list = await spiderHandler.ListWeChatAccountAsync();
+            if (list.Count <= 0)
             {
-                var list = await spiderHandler.ListWeChatAccountAsync();
-                if (list.Count <= 0)
-                {
-                    LogService.Error("当前没有取到公众号名称，请在数据库中写入数据");
-                    return;
-                }
-                SpiderTaskList.Clear();
-                list.ForEach(item =>
-                {
-                    var spider = new SpiderTask(item.NickName)
-                    {
-                        SpiderId = item.Id,
-                        Alias = item.Alias,
-                        LastUpdateDate = item.LastUpdate
-                    };
-                    item.SpiderRoles.ForEach(role =>
-                    {
-                        spider.Roles.Add(role.Role);
-                    });
-                    SpiderTaskList.Add(spider);
-                });
-                JavascriptCallback.OnSearchHandler += SearchHandlerCallback;
-                JavascriptCallback.OnArticleResponseHandler += ArticleResponseHandlerCallback;
-                TaskTimer.Interval = 10000;
-                TaskTimer.Tick += TaskTimer_Tick;
-                TaskTimer.Start();
-                InitStatus = true;
+                LogService.Error("当前没有取到公众号名称，请在数据库中写入数据");
+                return;
             }
+            SpiderTaskList.Clear();
+            list.ForEach(item =>
+            {
+                var spider = new SpiderTask(item.NickName)
+                {
+                    SpiderId = item.Id,
+                    Alias = item.Alias,
+                    LastUpdateDate = item.LastUpdate
+                };
+                item.SpiderRoles.ForEach(role =>
+                {
+                    spider.Roles.Add(role.Role);
+                });
+                SpiderTaskList.Add(spider);
+            });
+            JavascriptCallback.OnSearchHandler += SearchHandlerCallback;
+            JavascriptCallback.OnArticleResponseHandler += ArticleResponseHandlerCallback;
+            TaskTimer.Interval = 10000;
+            TaskTimer.Tick += TaskTimer_Tick;
+            TaskTimer.Start();
+            InitStatus = true;
         }
 
         private async void TaskTimer_Tick(object sender, EventArgs e)
@@ -141,6 +138,7 @@ namespace wechat_spider_core.spider
                     LogService.Info($"当前规则{role}");
                     CurrentTask = item;
                     CurrentTask.CurrentPage = 1;
+                    await spiderHandler.SetAccountSpiderStart(item.SpiderId, IdWorkContext.CLIENT_ID);
                     item.Run();
                     TaskRuning = true;
                     break;
@@ -194,7 +192,7 @@ namespace wechat_spider_core.spider
             else
             {
                 LogService.Error($"未匹配到公众号名称:{CurrentTask.NickName}");
-                NextTask();
+                await NextTask();
             }
         }
         /// <summary>
@@ -208,7 +206,7 @@ namespace wechat_spider_core.spider
             if(null == accountModel)
             {
                 LogService.Error($"未找到账号实体:{CurrentTask.NickName}");
-                NextTask();
+                await NextTask();
             }
             else
             {
@@ -245,15 +243,16 @@ namespace wechat_spider_core.spider
                 }
                 else
                 {
-                    NextTask();
+                    await NextTask();
                 }
             }
         }
 
-        private void NextTask()
+        private async Task NextTask()
         {
             LogService.Info("准备开始下一个任务");
             SpiderTaskList.Remove(CurrentTask);
+            await spiderHandler.SetAccountSpiderStop(CurrentTask.SpiderId);
             CurrentTask = null;
             TaskRuning = false;
             if (SpiderTaskList.Count == 0)

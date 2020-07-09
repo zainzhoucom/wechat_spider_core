@@ -5,11 +5,18 @@ dotnet core开发的微信公众号历史文章爬虫
 
 
 
-| dotnet core         | 3.1      | [](https://dotnet.microsoft.com/download/dotnet-core/3.1) |
-| ------------------- | -------- | --------------------------------------------------------- |
-| CefSharp            | 31.3.100 | [](https://github.com/cefsharp/CefSharp)                  |
-| EntityFramewordCore | 3.1.5    |                                                           |
-| NLog                | 4.7.2    |                                                           |
+| 操作系统 | Win10 2004 |
+| -------- | ---------- |
+| IDE      | VS 2019    |
+| 数据库   | PostgreSQL |
+
+
+
+| dotnet core         | 3.1      | [3.1](https://dotnet.microsoft.com/download/dotnet-core/3.1) |
+| ------------------- | -------- | ------------------------------------------------------------ |
+| CefSharp            | 31.3.100 | [CefSharp](https://github.com/cefsharp/CefSharp)             |
+| EntityFramewordCore | 3.1.5    |                                                              |
+| NLog                | 4.7.2    |                                                              |
 
 # 实现思路
 

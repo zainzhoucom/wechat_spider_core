@@ -1,5 +1,5 @@
 ﻿using Autofac;
-using wechat_spider_core.ef;
+using System.Reflection;
 
 namespace wechat_spider_core.ioc
 {
@@ -7,25 +7,35 @@ namespace wechat_spider_core.ioc
     {
         private static IContainer container = null;
 
-        private static object lock_obj = new object();
+        private readonly static object lock_obj = new object();
 
-        public static IContainer GetContainer()
+        public static void Init()
+        {
+            if (null == container)
+            {
+                lock (lock_obj)
+                {
+                    if (null == container)
+                    {
+                        var builder = new ContainerBuilder();
+                        builder.RegisterAssemblyTypes(Assembly.GetExecutingAssembly()).AsImplementedInterfaces().AsSelf();
+
+                        container = builder.Build();
+                    }
+                }
+            }
+        }
+        public static T GetFromFac<T>()
         {
             if(null == container)
             {
                 lock(lock_obj)
                 {
-                    if(null == container)
-                    {
-                        var builder = new ContainerBuilder();
-                        builder.RegisterType<ISpiderHandler>();
-                        builder.RegisterType<SpiderContext>();
-                        container = builder.Build();
-                    }
+                    Init();
                 }
             }
 
-            return container;
+            return container.Resolve<T>();
         }
 
     }
