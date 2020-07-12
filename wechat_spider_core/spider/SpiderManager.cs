@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Timers;
 using wechat_spider_core.ef;
 using wechat_spider_core.ioc;
 using wechat_spider_core.service;
@@ -17,13 +18,13 @@ namespace wechat_spider_core.spider
 
         private readonly ISpiderHandler spiderHandler = InitIocModule.GetFromFac<ISpiderHandler>();
 
+        private readonly System.Windows.Forms.Timer TaskTimer = new System.Windows.Forms.Timer();
+
         private SpiderTask CurrentTask = null;
 
         private bool InitStatus = false;
 
         private bool TaskRuning = false;
-
-        private static readonly System.Windows.Forms.Timer TaskTimer = new System.Windows.Forms.Timer();
 
         private int LastStartTimeSpan = 0;
 
@@ -64,6 +65,9 @@ namespace wechat_spider_core.spider
             if(!InitStatus)
             {
                 spiderHandler.InsertClientSgin(IdWorkContext.CLIENT_ID);
+                TaskTimer.Interval = 10000;
+                TaskTimer.Tick += TaskTimer_Tick;
+                TaskTimer.Start();
             }
         }
 
@@ -95,9 +99,6 @@ namespace wechat_spider_core.spider
             });
             JavascriptCallback.OnSearchHandler += SearchHandlerCallback;
             JavascriptCallback.OnArticleResponseHandler += ArticleResponseHandlerCallback;
-            TaskTimer.Interval = 10000;
-            TaskTimer.Tick += TaskTimer_Tick;
-            TaskTimer.Start();
             InitStatus = true;
         }
 
@@ -115,25 +116,25 @@ namespace wechat_spider_core.spider
             if (TaskRuning)
                 return;
             DateTime now = DateTime.Now;
-            string role = $"{now.Day.ToString().PadLeft(2,'0')}:{now.Hour.ToString().PadLeft(2,'0')}";
+            string role = $"{now.Day.ToString().PadLeft(2, '0')}:{now.Hour.ToString().PadLeft(2, '0')}";
             string runDate = now.ToString("yyyyMMddHH");
             foreach (var item in SpiderTaskList)
             {
                 try
                 {
-                    if(!await spiderHandler.QuerySpaderStatus(item.SpiderId))
+                    if (await spiderHandler.QuerySpaderStatus(item.SpiderId))
                     {
                         LogService.Info($"公众号{item.NickName}正在执行中");
-                        break;
+                        continue;
                     }
                 }
                 catch (NullReferenceException)
                 {
                     LogService.Error($"未找到公众号{item.NickName}:({item.SpiderId})");
-                    break;
+                    continue;
                 }
-                 
-                if(item.Ready(role, runDate))
+
+                if (item.Ready(role, runDate))
                 {
                     LogService.Info($"当前规则{role}");
                     CurrentTask = item;
@@ -144,6 +145,7 @@ namespace wechat_spider_core.spider
                     break;
                 }
             }
+            
         }
 
         /// <summary>
@@ -170,6 +172,13 @@ namespace wechat_spider_core.spider
                 if (accountModel.LastUpdate.HasValue)
                 {
                     DateTime last = accountModel.LastUpdate.Value;
+                    TimeSpan ts = last - new DateTime(1970, 1, 1, 0, 0, 0, 0);
+                    LastStartTimeSpan = Convert.ToInt32(ts.TotalSeconds);
+                }
+                else
+                {
+                    //取前一周
+                    DateTime last = DateTime.Now.AddDays(-7);
                     TimeSpan ts = last - new DateTime(1970, 1, 1, 0, 0, 0, 0);
                     LastStartTimeSpan = Convert.ToInt32(ts.TotalSeconds);
                 }
@@ -202,35 +211,32 @@ namespace wechat_spider_core.spider
         private async void ArticleResponseHandlerCallback(ArticleResponseModel articleResponseModel)
         {
             LogService.Info($"当前条数：{articleResponseModel.app_msg_list.Count},准备写入到数据库");
-            var accountModel = await spiderHandler.QueryWeChatAccountAsync(CurrentTask.SpiderId);
-            if(null == accountModel)
+            int oldArticleCount = articleResponseModel.app_msg_list.Count(a => a.create_time < LastStartTimeSpan);
+            if (oldArticleCount < articleResponseModel.app_msg_list.Count)
             {
-                LogService.Error($"未找到账号实体:{CurrentTask.NickName}");
-                await NextTask();
-            }
-            else
-            {
-                int oldArticleCount = articleResponseModel.app_msg_list.Count(a => a.create_time < LastStartTimeSpan);      
-                if (oldArticleCount < articleResponseModel.app_msg_list.Count)
+                List<WeChatArticle> saveList = new List<WeChatArticle>();
+                articleResponseModel.app_msg_list.ForEach(async item =>
                 {
-                    List<WeChatArticle> saveList = new List<WeChatArticle>();
-                    articleResponseModel.app_msg_list.ForEach(async item =>
+                    var article = await spiderHandler.QueryArticleByAid(item.aid);
+                    if (article.Count >= 1 || item.create_time < LastStartTimeSpan)
                     {
-                        var article = await spiderHandler.QueryArticleByAid(item.aid);
-                        if (article.Count >= 1 || item.create_time < LastStartTimeSpan)
-                        {
-                            LogService.Info($"文章({item.aid})已经存在，跳过保存");
-                            return;
-                        }
-                        WeChatArticle model = item.ConvertModel();
-                        model.Id = IdWorkContext.ID_WORKER.NextId();
-                        model.CreateDate = DateTime.Now;
-                        model.WeChatAccount = accountModel;
-                        saveList.Add(model);
-                    });
+                        LogService.Info($"文章({item.aid})已经存在，跳过保存");
+                        return;
+                    }
+                    WeChatArticle model = item.ConvertModel();
+                    model.Id = IdWorkContext.ID_WORKER.NextId();
+                    model.CreateDate = DateTime.Now;
+                    saveList.Add(model);
+                });
+                if(saveList.Count == 0)
+                {
+                    await NextTask();
+                }
+                else
+                {
                     try
                     {
-                        await spiderHandler.InsertArticleByList(saveList);
+                        await spiderHandler.InsertArticleByList(saveList, CurrentTask.SpiderId);
                     }
                     catch (Exception e)
                     {
@@ -241,10 +247,11 @@ namespace wechat_spider_core.spider
                     Thread.Sleep(1000 * 30);
                     CurrentTask.ToQueryArticleList(++CurrentTask.CurrentPage);
                 }
-                else
-                {
-                    await NextTask();
-                }
+                
+            }
+            else
+            {
+                await NextTask();
             }
         }
 

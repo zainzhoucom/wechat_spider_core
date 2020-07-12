@@ -43,7 +43,7 @@ namespace wechat_spider_core
         /// </summary>
         /// <param name="list"></param>
         /// <returns></returns>
-        Task<int> InsertArticleByList(List<WeChatArticle> list);
+        Task<int> InsertArticleByList(List<WeChatArticle> list, long accountId);
 
         Task<List<WeChatArticle>> QueryArticleByAid(string aid);
 

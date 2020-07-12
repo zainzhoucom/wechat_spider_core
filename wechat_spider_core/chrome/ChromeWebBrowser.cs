@@ -88,9 +88,16 @@ namespace wechat_spider_core
         {
             Task.Run(async () =>
             {
-                await spiderManager.Init();
+                try
+                {
+                    await spiderManager.Init();
+                }
+                catch (Exception ex)
+                {
+                    LogService.Error($"启动任务出错:{ex.Message}", ex);
+                    throw;
+                }
             });
-            
         }
     }
 }

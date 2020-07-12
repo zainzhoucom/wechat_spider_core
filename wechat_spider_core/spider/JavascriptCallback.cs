@@ -1,7 +1,6 @@
 ﻿using Newtonsoft.Json;
 using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Threading.Tasks;
 
 namespace wechat_spider_core.spider
 {
@@ -29,25 +28,29 @@ namespace wechat_spider_core.spider
         /// <param name="origin"></param>
         public void OnHttpGetHandler(string result, string origin)
         {
-            BaseModel baseModel = JsonConvert.DeserializeObject<BaseModel>(result);
-            if (baseModel.base_resp.err_msg == "ok")
+            Task.Run(async () =>
             {
-                if (origin == "queryList")
+                BaseModel baseModel = JsonConvert.DeserializeObject<BaseModel>(result);
+                if (baseModel.base_resp.err_msg == "ok")
                 {
-                    SearchModel searchModel = JsonConvert.DeserializeObject<SearchModel>(result);
-                    OnSearchHandler?.Invoke(searchModel);
+                    if (origin == "queryList")
+                    {
+                        SearchModel searchModel = JsonConvert.DeserializeObject<SearchModel>(result);
+                        OnSearchHandler?.Invoke(searchModel);
+                    }
+                    else if (origin == "article")
+                    {
+                        ArticleResponseModel articleResponseModel = JsonConvert.DeserializeObject<ArticleResponseModel>(result);
+                        OnArticleResponseHandler?.Invoke(articleResponseModel);
+                    }
                 }
-                else if (origin == "article")
+                else
                 {
-                    ArticleResponseModel articleResponseModel = JsonConvert.DeserializeObject<ArticleResponseModel>(result);
-                    OnArticleResponseHandler?.Invoke(articleResponseModel);
+                    LogService.Error($"请求{origin}出错：{result}");
+                    await ChromeWebBrowser.spiderManager.OnRequestError();
                 }
-            }
-            else
-            {
-                LogService.Error($"请求{origin}出错：{result}");
-                ChromeWebBrowser.spiderManager.OnRequestError();
-            }
+            });
+            
         }
     }
 }
