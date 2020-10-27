@@ -9,7 +9,7 @@
 
   <ItemGroup>
     <PackageReference Include="Autofac" Version="5.2.0" />
-    <PackageReference Include="CefSharp.WinForms" Version="81.3.100" />
+    <PackageReference Include="CefSharp.WinForms" Version="85.3.130" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="3.1.5" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="3.1.5">
       <PrivateAssets>all</PrivateAssets>
