@@ -23,14 +23,28 @@ namespace wechat_spider_core
             settings.CefCommandLineArgs.Add("--enable-system-flash", "1");
             settings.Locale = "zh-CN";
             settings.UserAgent = Config.UserAgent;
+            settings.RegisterScheme(new CefCustomScheme()
+            {
+                SchemeName = "http",
+                DomainName = "client",
+                SchemeHandlerFactory = new ResourceSchemeHandlerFactory()
+            });
             Cef.Initialize(settings);
 
             chromeBrowser = new ChromiumWebBrowser("https://mp.weixin.qq.com/");
+            //chromeBrowser = new ChromiumWebBrowser("http://localhost:8080/");
 
             chromeBrowser.FrameLoadEnd += ChromeBrowser_FrameLoadEnd;
             chromeBrowser.KeyboardHandler = new CefKeyBoardHandler();
             chromeBrowser.MenuHandler = new MenuHandler();
             chromeBrowser.ResourceRequestHandlerFactory = new ResourceRequestHandlerFactory();
+
+            BrowserSettings browserSettings = new BrowserSettings();
+            browserSettings.FileAccessFromFileUrls = CefState.Enabled;
+            browserSettings.UniversalAccessFromFileUrls = CefState.Enabled;
+            browserSettings.WebSecurity = CefState.Disabled;
+            browserSettings.LocalStorage = CefState.Enabled;
+            chromeBrowser.BrowserSettings = browserSettings;
 
             chromeBrowser.ConsoleMessage += ChromeBrowser_ConsoleMessage;
             InjectJavascript.InjectNetCollback();

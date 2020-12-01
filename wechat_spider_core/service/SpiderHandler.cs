@@ -66,7 +66,7 @@ namespace wechat_spider_core.service
             {
                 throw new NullReferenceException("未找到公众号实体");
             }
-            if(account.TaskStartSign != null)
+            if(account.TaskStartSign == null)
             {
                 return false;
             }

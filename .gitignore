@@ -18,6 +18,7 @@ bld/
 [Ll]og/
 [Dd]lls/*
 ![Dd]lls/Publish
+Migrations/
 
 /setup/
 
